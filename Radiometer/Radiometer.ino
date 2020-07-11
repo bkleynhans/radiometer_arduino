@@ -9,13 +9,13 @@
     Authors : Benjamin Kleynhans
 
     Last Modified By : Benjamin Kleynhans
-    Last Modified Date : July 1, 2020
+    Last Modified Date : July 2, 2020
     Filename : Radiometer.ino
 */
 
 // Import modules
 #include <stdio.h>
-#include <string.h>
+//~ #include <string.h>
 
 #include "ExtendedADCShield.h"
 #include "AdafruitDataloggingShield.h"
@@ -44,7 +44,8 @@ const char* pins[8] = {"","A0", "", "A1", "", "", "", "A2"};
 const char* pHEADING_STRING = "ch1,ch2,tp1,ch3,ch4,tp2,ch5,ch6,ch7,ch8,tp3,Year,Month,Day,Hour,Minutes,Seconds";
 
 // Define FTP server connection properties
-const char* serverIP = "dirsftp,cis.rit.edu";
+//~ const char* serverAddress = "dirsftp.cis.rit.edu";
+const char* serverAddress = "98.10.45.151";
 const byte serverPort = 21;
 const char* username = "anonymous";
 const char* password = "ritlandsat@cis.rit.edu";
@@ -72,17 +73,17 @@ bool initialStartup = true;
 
 // Define sizes of variables used for collection
 const int collectionSize = 7;
-const int titleSize = 20;
-const int positionSize = 66;
-const int stringSize = 100;
+const int titleStringSize = 20;
+const int positionStringSize = 66;
+const int collectionStringSize = 100;
 
 // Define the variable used for data collection
 long chX;
 float tempVal;
 char chValue[collectionSize];
-char titleString[titleSize];
-char positionString[positionSize];
-char collectionString[stringSize];
+char titleString[titleStringSize];
+char positionString[positionStringSize];
+char collectionString[collectionStringSize];
 
 // Define the sample timer variables
 unsigned long currentTime;
@@ -101,7 +102,8 @@ uint8_t currentMinute;
 char filename[13];
 
 // Define whether data needs to be uploaded during this cycle
-bool dataUpload = false;
+bool uploadData = false;
+int counter = 0;
 
 // the setup function runs once when you press reset or power the board
 void setup()
@@ -129,9 +131,16 @@ void loop()
         pBotletics_LTEGPS->powerOn();
         
         // If we need to upload a data file, upload it
-        if (dataUpload)
+        if (uploadData)
         {
-            uploadData();
+            pBotletics_LTEGPS->uploadDataFile(
+                pDataloggingShield,     // Pointer to the datalogger instance
+                filename,               // Filename of file to be uploaded
+                serverAddress,          // FTP server address
+                serverPort,             // FTP server port
+                username,               // FTP server username
+                password                // FTP server password
+            );
         }
                 
         // Update the clock from the Cellular service
@@ -150,16 +159,14 @@ void loop()
     }
     
     if (currentDay != pDataloggingShield->rtc.now().day()) {
-    //~ if (pDataloggingShield->rtc.now().minute() >= currentMinute + 11) {
         
         Serial.println(F("--> Day has changed, updating configuration and creating new file"));
         
         // Update the current day        
         currentDay = pDataloggingShield->rtc.now().day();
-        //~ currentMinute = pDataloggingShield->rtc.now().minute();
         
         // Upload the data files to the online storage service
-        dataUpload = true;
+        uploadData = true;
         
         // Set initial startup to true, which will force a re-sync of the clock and create a new file for the new day.
         initialStartup = true;
@@ -178,7 +185,22 @@ void loop()
         pDataloggingShield->write(filename, collectionString);
         
         previousTime = currentTime;
+        
+        // ----- TESTING -----
+        counter++;
+        // ----- TESTING -----
     }
+    
+    // ----- TESTING -----
+    if (counter == 60) {
+        
+        initialStartup = true;
+        uploadData = true;
+        
+        counter = 0;
+    }
+    // ----- TESTING -----
+    
 }
 
 void setUpAdcShield()
@@ -242,12 +264,6 @@ void setClock()
         pBotletics_LTEGPS->getMinutes(),             // Minute
         pBotletics_LTEGPS->getSeconds()              // Second
     );
-}
-
-// Upload the data file to the cloud
-void uploadData()
-{
-    return 0;
 }
 
 // Read the analog inputs from the Mayhew Extended ADC Shield
@@ -373,7 +389,7 @@ void buildPositionString()
     
     snprintf(
         positionString,
-        positionSize - strlen(positionString),
+        positionStringSize - strlen(positionString),
         "Latitude: %s, Longitude: %s, Altitude %s",
         pBotletics_LTEGPS->getLatitudeStr(),
         pBotletics_LTEGPS->getLongitudeStr(),
@@ -388,8 +404,8 @@ void addDate()
 {    
     snprintf(
         collectionString + strlen(collectionString),
-        stringSize - strlen(collectionString),
-        "%d,%d,%d,%d,%d,%d",
+        collectionStringSize - strlen(collectionString),
+        "%04d,%02d,%02d,%02d,%02d,%02d",
         pDataloggingShield->rtc.now().year(),
         pDataloggingShield->rtc.now().month(),
         pDataloggingShield->rtc.now().day(),

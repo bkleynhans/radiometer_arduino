@@ -37,8 +37,12 @@ public:
     char* getHeading();
     void setSiteName(char* pSiteName);
     char* getSiteName();
+    File* getOpenedFile();
     
     //// Hardware Management
+    // Retrieve the chip used for SD card management
+    byte getChipSelect();
+    
     // Realtime clock object
     const RTC_PCF8523 rtc;
     
@@ -49,7 +53,13 @@ public:
     bool clockSet();
     
     // Set the hardware clock
-    void setClock(int yyyy, int mo, int dd, int hh, int mm, int ss); 
+    void setClock(int yyyy, int mo, int dd, int hh, int mm, int ss);
+    
+    // Data management
+    bool openFile(char accessType, char* filename);
+    void createFile(char* filename);
+    bool fileExists(char* filename);
+    void closeFile();
 
 private:
     //// VARIABLES
@@ -88,10 +98,10 @@ private:
     void openSerial();
     void initializeSdCard();
     
-    // Data management
-    bool openFile(char accessType, char* filename);
-    void createFile(char* filename);
-    bool fileExists(char* filename);
-    void closeFile();    
+    //~ // Data management
+    //~ bool openFile(char accessType, char* filename);
+    //~ void createFile(char* filename);
+    //~ bool fileExists(char* filename);
+    //~ void closeFile();
 };
 #endif // AdafruitDataloggingShield_h
