@@ -49,12 +49,6 @@ void Botletics_LTE_GPS_Shield::initializeDevice()
     
     // Configure power key
     pinMode(*this->pPWRKEY, OUTPUT);
-    
-    //~ // Turn on the module
-    //~ this->powerOn();
-    
-    //~ // Get network status after power-on
-    //~ this->getNetworkStatus();
 }
 
 // Turn the Botletics_LTE_GPS_Shield on
@@ -112,6 +106,10 @@ void Botletics_LTE_GPS_Shield::powerOff()
 {
     this->pSerial->println(F("\n        --- Turning off Botletics LTE/GPS shield ---\n"));
     
+    // Reset connection variable
+    this->connected = false;
+    
+    // Turn off the device
     this->fona.powerDown();
     delay(5000);
     
@@ -244,20 +242,36 @@ void Botletics_LTE_GPS_Shield::turnGpsOff()
     delay(100);
 }
 
-// Turn the LTE on
-void Botletics_LTE_GPS_Shield::turnGprsOn()
+// Enable Data
+void Botletics_LTE_GPS_Shield::enableData()
 {
-    this->pSerial->println(F("\n      --> Turning GPRS on"));
-    this->fona.enableGPRS(true);
-    delay(100);
+    this->pSerial->println(F("\n      --> Enabling data"));
+    
+    if (!this->fona.wirelessConnStatus()) {
+        while (!this->fona.openWirelessConnection(true)) {
+            this->pSerial->println(F("\n      --> Wireless connection failed, retrying..."));
+        }
+        
+        this->pSerial->println(F("\n      --> Data enabled!"));
+    } else {
+        this->pSerial->println(F("\n      --> Data already enabled"));
+    }
 }
 
-// Turn the LTE off
-void Botletics_LTE_GPS_Shield::turnGprsOff()
+// Enable Data
+void Botletics_LTE_GPS_Shield::disableData()
 {
-    this->pSerial->println(F("\n      --> Turning GPRS off"));
-    this->fona.enableGPRS(false);
-    delay(100);
+    this->pSerial->println(F("\n      --> Disabling data"));
+    
+    if (this->fona.wirelessConnStatus()) {
+        this->fona.openWirelessConnection(false);
+        
+        this->connected = false;
+        
+        this->pSerial->println(F("\n      --> Data disabled!"));
+    } else {
+        this->pSerial->println(F("\n      --> Data already disabled"));
+    }
 }
 
 // Get the current signal strength
@@ -430,36 +444,70 @@ void Botletics_LTE_GPS_Shield::updateGeoData()
     this->turnGpsOff();
 }
 
-void Botletics_LTE_GPS_Shield::uploadDataFile(
-        AdafruitDataloggingShield* pDataloggingShield,
-        char* filename,        
-        char* serverAddress,
-        byte serverPort,
-        char* username,
-        char* password)
-{
-    // Connect to GPRS
-    this->turnGprsOn();
+// Open connections and connect to MQTT broker
+void Botletics_LTE_GPS_Shield::connectToBroker(char* filename,
+            char* serverAddress,
+            int serverPort,
+            char* username,
+            char* password)
+{    
+    // Enable data
+    this->enableData();
     
     // Ensure we are connected to the LTE service
     this->getNetworkStatus();
     
-    // Connect to the FTP server
-    bool connected = false;
-    
-    this->pSerial->println(F("Connecting to FTP server..."));
-    
-    while (!this->fona.FTP_Connect(serverAddress, serverPort, username, password)) {
-        this->pSerial->println(F("Connection to FTP server failed... retrying..."));
-        delay(2000);
+    // Configure broker connection
+    if (!this->fona.MQTT_connectionStatus()) {
+        this->fona.MQTT_setParameter("URL", serverAddress, serverPort);
+        //~ fona.MQTT_setParameter("USERNAME", username);
+        //~ fona.MQTT_setParameter("PASSWORD", password);
     }
     
+    // Connect to the MQTT broker
+    bool brokerConnected = false;
+    
+    this->pSerial->println(F("Connecting to MQTT broker..."));
+    
+    //~ byte attemptCounter = 0;    
+    
+    while (!brokerConnected) {
+        brokerConnected = this->fona.MQTT_connect(true);
+        
+        // Connect to broker if not yet connected
+        if (!brokerConnected) {// && attemptCounter < 10) {
+            this->pSerial->println(F("Connection to broker failed... retrying..."));
+            //~ attemptCounter++;
+            
+            delay(2000);
+        }
+    }
+}
+
+// Close connections and disconnect from MQTT broker
+void Botletics_LTE_GPS_Shield::disconnectFromBroker() {
+    
+    // Disable data
+    this->disableData();
+}
+
+void Botletics_LTE_GPS_Shield::uploadDataFile(
+        AdafruitDataloggingShield* pDataloggingShield,
+        char* filename,        
+        char* serverAddress,
+        int serverPort,
+        char* username,
+        char* password)
+{
+    this->connectToBroker(filename, serverAddress, serverPort, username, password);
+        
     char tempVal[100] = {};
     byte i = 0;
     bool newLine = false;
     char auxStr[100] = {};
     long dataSegment = 0;
     long seriesMonitor = 0;
+    bool published = false;
     
     // Clean the current dataSeries
     memset(this->dataSeries, 0, sizeof(this->dataSeries));
@@ -476,6 +524,9 @@ void Botletics_LTE_GPS_Shield::uploadDataFile(
             
             // Read the data file and break the file into seperate files for FTP transmission
             while (pDataloggingShield->getOpenedFile()->available()) {
+                // Clean the temp file
+                memset(tempVal, 0, sizeof(tempVal));
+                
                 currentChar = pDataloggingShield->getOpenedFile()->read();
                 
                 while (!newLine) {                    
@@ -495,7 +546,7 @@ void Botletics_LTE_GPS_Shield::uploadDataFile(
                     }
                 }
                 
-                //~ this->pSerial->print(tempVal);
+                 // this->pSerial->print(tempVal);
                 
                 /* Each line from the text file can be up to 100 characters.  This section of code takes
                  * the line and adds it to the transmission string that is the length of the line, plus
@@ -508,9 +559,9 @@ void Botletics_LTE_GPS_Shield::uploadDataFile(
                     
                     seriesMonitor++;
                 } else { // Once the required number of lines are appended, transmit to server                    
-                    //~ this->pSerial->println(F("*********************** DATA SERIES ***********************"));
-                    //~ this->pSerial->print(this->dataSeries);
-                    //~ this->pSerial->println(F("***********************************************************"));
+                    //~ // this->pSerial->println(F("*********************** DATA SERIES ***********************"));
+                    //~ // this->pSerial->print(this->dataSeries);
+                    //~ // this->pSerial->println(F("***********************************************************"));
                     
                     this->sendDataSegment(filename, dataSegment);
                     
@@ -522,6 +573,7 @@ void Botletics_LTE_GPS_Shield::uploadDataFile(
                 }
                 
                 newLine = false;
+                published = false;
                 
                 pDataloggingShield->getOpenedFile()->flush();
             }
@@ -531,9 +583,8 @@ void Botletics_LTE_GPS_Shield::uploadDataFile(
     }
     
     SD.end();
-
-    this->turnGprsOff();
     
+    this->disconnectFromBroker();    
 }
 
 void Botletics_LTE_GPS_Shield::addToDataSeries(char* dataSegment)
@@ -548,20 +599,19 @@ void Botletics_LTE_GPS_Shield::addToDataSeries(char* dataSegment)
 
 void Botletics_LTE_GPS_Shield::sendDataSegment(char* filename, long dataSegment)
 {
-    this->buildFullPath(filename, dataSegment);
-    
     bool success = false;
     
-    while (!success) {        
-        success = fona.FTP_PUT(
-                        this->outputFilename,
-                        this->outputFilepath,
-                        this->dataSeries,
-                        strlen(this->dataSeries)
+    while (!success) {
+        success = this->fona.MQTT_publish(
+            "test/message", 
+            this->dataSeries,
+            strlen(this->dataSeries), 
+            1, 
+            0
         );
         
         if (!success) {
-            this->pSerial->println(F("Failed, retrying"));
+            this->pSerial->println(F("Failed to publish to broker, retrying..."));
             delay(10000);
         }
     }

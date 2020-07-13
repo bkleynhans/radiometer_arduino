@@ -65,7 +65,7 @@ public:
             AdafruitDataloggingShield* pDataloggingShield,
             char* filename,
             char* serverAddress,
-            byte serverPort,
+            int serverPort,
             char* username,
             char* password
     );
@@ -127,7 +127,7 @@ private:
     // Filename and path for data upload
     static const byte outputFilenameSize = 13;
     static const byte outputFilepathSize = 35;
-    static const byte linesPerFile = 10;
+    static const byte linesPerFile = 5;
     static const long dataSeriesSize = 101 * linesPerFile;
     
     char outputFilename[outputFilenameSize];
@@ -136,18 +136,26 @@ private:
 
     //// METHODS
     // Hardware management
-    void resetDevice();
+    //~ void resetDevice();
     void initializeDevice();
     void turnGpsOn();
     void turnGpsOff();
-    void turnGprsOn();
-    void turnGprsOff();
+    void enableData();
+    void disableData();
     
     // Software management
     void updateBaud();
     void getSignalStrength();
     void getNetworkStatus();
-    void updateGeoData();
+    void updateGeoData();    
+    
+    void connectToBroker(char* filename,
+            char* serverAddress,
+            int serverPort,
+            char* username,
+            char* password
+    );
+    void disconnectFromBroker();
     
     void addToDataSeries(char* dataSegment);
     void sendDataSegment(char* filename, long dataSegment);
