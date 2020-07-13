@@ -8,7 +8,7 @@
     Authors : Benjamin Kleynhans
 
     Last Modified By : Benjamin Kleynhans
-    Last Modified Date : June 26, 2020
+    Last Modified Date : July 2, 2020
     Filename : Botletics_LTE_GPS_Shield.h
 */
 
@@ -18,6 +18,8 @@
 #include <Arduino.h>
 #include <SoftwareSerial.h>
 #include <Adafruit_FONA.h>
+
+#include "AdafruitDataloggingShield.h"
 
 class Botletics_LTE_GPS_Shield
 {
@@ -58,13 +60,21 @@ public:
     void setSeconds(float seconds);
     float getSeconds();
     
+    // Upload data to server
+    void uploadDataFile(
+            AdafruitDataloggingShield* pDataloggingShield,
+            char* filename,
+            char* serverAddress,
+            byte serverPort,
+            char* username,
+            char* password
+    );
+    
     //// Variables    
     //// Hardware Management
     // Methods
     void powerOn();
     void powerOff();
-    
-    // Variables
 
 private:
     //// VARIABLES
@@ -83,7 +93,6 @@ private:
     // Define Software Serial
     // Conversions from example:
     //      fonaSS      --> *this->pFonaSS
-    //      fonaSerial  --> this->pFonaSerial
     //      fona        --> fona
     
     SoftwareSerial* pFonaSS = nullptr;
@@ -114,11 +123,21 @@ private:
     // Variable to monitor network connectivity
     bool connected = false;
     uint8_t netStatus = 0;
-        
+
+    // Filename and path for data upload
+    static const byte outputFilenameSize = 13;
+    static const byte outputFilepathSize = 35;
+    static const byte linesPerFile = 10;
+    static const long dataSeriesSize = 101 * linesPerFile;
+    
+    char outputFilename[outputFilenameSize];
+    char outputFilepath[outputFilepathSize];
+    char dataSeries[dataSeriesSize];
+
     //// METHODS
     // Hardware management
     void resetDevice();
-    void initializeDevice();    
+    void initializeDevice();
     void turnGpsOn();
     void turnGpsOff();
     void turnGprsOn();
@@ -129,8 +148,13 @@ private:
     void getSignalStrength();
     void getNetworkStatus();
     void updateGeoData();
-    void uploadDataFile();
-    void resetVariables();    
+    
+    void addToDataSeries(char* dataSegment);
+    void sendDataSegment(char* filename, long dataSegment);
+    void buildFullPath(char* filename, long dataSegment);
+    void subString(char* inputString, char* outputSubstring, byte start, byte length);
+    
+    void resetVariables();
     
 };
 #endif // Botletics_LTE_GPS_Shield_h

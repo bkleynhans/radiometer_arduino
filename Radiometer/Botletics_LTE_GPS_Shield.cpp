@@ -12,7 +12,7 @@
             is being used on.
 
     Last Modified By : Benjamin Kleynhans
-    Last Modified Date : June 26, 2020
+    Last Modified Date : July 2, 2020
     Filename : Botletics_LTE_GPS_Shield.cpp
 */
 
@@ -299,7 +299,7 @@ void Botletics_LTE_GPS_Shield::getNetworkStatus()
     // Wait for the network to connect before continuing
     while (!this->connected) {
         // read the network/cellular status
-        this->netStatus = fona.getNetworkStatus();
+        this->netStatus = this->fona.getNetworkStatus();
         
         this->pSerial->print(F("Network status "));
         this->pSerial->print(this->netStatus);
@@ -428,6 +428,193 @@ void Botletics_LTE_GPS_Shield::updateGeoData()
     
     // Turn GPS off
     this->turnGpsOff();
+}
+
+void Botletics_LTE_GPS_Shield::uploadDataFile(
+        AdafruitDataloggingShield* pDataloggingShield,
+        char* filename,        
+        char* serverAddress,
+        byte serverPort,
+        char* username,
+        char* password)
+{
+    // Connect to GPRS
+    this->turnGprsOn();
+    
+    // Ensure we are connected to the LTE service
+    this->getNetworkStatus();
+    
+    // Connect to the FTP server
+    bool connected = false;
+    
+    this->pSerial->println(F("Connecting to FTP server..."));
+    
+    while (!this->fona.FTP_Connect(serverAddress, serverPort, username, password)) {
+        this->pSerial->println(F("Connection to FTP server failed... retrying..."));
+        delay(2000);
+    }
+    
+    char tempVal[100] = {};
+    byte i = 0;
+    bool newLine = false;
+    char auxStr[100] = {};
+    long dataSegment = 0;
+    long seriesMonitor = 0;
+    
+    // Clean the current dataSeries
+    memset(this->dataSeries, 0, sizeof(this->dataSeries));
+        
+    // Uploading the file to the server
+    if (!SD.begin(pDataloggingShield->getChipSelect())) {            
+        this->pSerial->print(F("\n      !!! Unable to access SD card. !!!"));        
+    } else {        
+        if (pDataloggingShield->openFile('r', filename)) {
+            // find the start of the file
+            pDataloggingShield->getOpenedFile()->seek(0);
+  
+            char currentChar;
+            
+            // Read the data file and break the file into seperate files for FTP transmission
+            while (pDataloggingShield->getOpenedFile()->available()) {
+                currentChar = pDataloggingShield->getOpenedFile()->read();
+                
+                while (!newLine) {                    
+                    if (currentChar == '\r') {
+                        newLine = true;
+                        
+                        tempVal[i] = '\r';
+                        tempVal[i + 1] = '\n';
+                        
+                        i = 0;                        
+                    } else {
+                        tempVal[i] = currentChar;
+                    
+                        currentChar = pDataloggingShield->getOpenedFile()->read();
+                        
+                        i++;
+                    }
+                }
+                
+                //~ this->pSerial->print(tempVal);
+                
+                /* Each line from the text file can be up to 100 characters.  This section of code takes
+                 * the line and adds it to the transmission string that is the length of the line, plus
+                 * 1 for possible /n and /r characters.
+                 */
+                 
+                // While we have not appended the specified number of lines, append more lines
+                if (seriesMonitor < this->linesPerFile) {
+                    this->addToDataSeries(tempVal);
+                    
+                    seriesMonitor++;
+                } else { // Once the required number of lines are appended, transmit to server                    
+                    //~ this->pSerial->println(F("*********************** DATA SERIES ***********************"));
+                    //~ this->pSerial->print(this->dataSeries);
+                    //~ this->pSerial->println(F("***********************************************************"));
+                    
+                    this->sendDataSegment(filename, dataSegment);
+                    
+                    dataSegment++;
+                    seriesMonitor = 0;
+                    
+                    // Clean the current data series
+                    memset(this->dataSeries, 0, sizeof(this->dataSeries));
+                }
+                
+                newLine = false;
+                
+                pDataloggingShield->getOpenedFile()->flush();
+            }
+            
+            pDataloggingShield->closeFile();
+        }
+    }
+    
+    SD.end();
+
+    this->turnGprsOff();
+    
+}
+
+void Botletics_LTE_GPS_Shield::addToDataSeries(char* dataSegment)
+{
+    snprintf(
+        this->dataSeries + strlen(this->dataSeries) - 1,
+        this->dataSeriesSize - strlen(this->dataSeries),
+        "%s",
+        dataSegment
+    );
+}
+
+void Botletics_LTE_GPS_Shield::sendDataSegment(char* filename, long dataSegment)
+{
+    this->buildFullPath(filename, dataSegment);
+    
+    bool success = false;
+    
+    while (!success) {        
+        success = fona.FTP_PUT(
+                        this->outputFilename,
+                        this->outputFilepath,
+                        this->dataSeries,
+                        strlen(this->dataSeries)
+        );
+        
+        if (!success) {
+            this->pSerial->println(F("Failed, retrying"));
+            delay(10000);
+        }
+    }
+}
+
+// Build the file and path variables for FTP upload
+void Botletics_LTE_GPS_Shield::buildFullPath(char* filename, long dataSegment)
+{
+    char shortname[8] = {};
+    
+    this->subString(filename, shortname, 0, 8);
+    
+    // Clean the current outputFilename
+    memset(this->outputFilename, 0, sizeof(this->outputFilename));
+    
+    // Build the 'sectionized' filename
+    snprintf(
+        this->outputFilename,
+        this->outputFilenameSize,
+        "%s.%03d",
+        shortname,
+        dataSegment
+    );
+    
+    // Clean the current fullOutputPath
+    memset(this->outputFilepath, 0, sizeof(this->outputFilepath));
+    
+    // Build the full path for the output files
+    snprintf(
+        this->outputFilepath,
+        this->outputFilepathSize - strlen(this->outputFilepath),
+        "/pub/upload/",
+        //~ "rit-radiometer/incoming/",//%s/",
+        shortname
+    );
+}
+
+// Substring function using c-style strings
+void Botletics_LTE_GPS_Shield::subString(char* inputString, char* outputSubstring, byte start, byte length)
+{
+    byte counter = 0;
+    
+    while (counter < length) {
+        if (start == 0) {
+            outputSubstring[counter] = inputString[start + counter];
+        } else {
+            outputSubstring[counter] = inputString[start + counter - 1];
+        }
+            
+        counter++;
+    }
+    
+    outputSubstring[counter] = '\0';
 }
 
 void Botletics_LTE_GPS_Shield::resetVariables()

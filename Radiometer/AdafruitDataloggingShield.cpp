@@ -71,6 +71,18 @@ char* AdafruitDataloggingShield::getSiteName()
     return this->pSiteName;
 }
 
+// Get the chip used to access the SD card
+byte AdafruitDataloggingShield::getChipSelect()
+{
+    return this->chipSelect;
+}
+
+// Return a pointer to the opened file
+File* AdafruitDataloggingShield::getOpenedFile()
+{
+    return this->pOpenedFile;
+}
+
 //Display a directory of the SD-Card
 void AdafruitDataloggingShield::dir()
 {
@@ -167,7 +179,7 @@ bool AdafruitDataloggingShield::openFile(char accessType, char* filename)
     switch (accessType)
     {
         case 'r':            
-            this->pOpenedFile = &(SD.open(filename));
+            this->pOpenedFile = &(SD.open(filename, O_READ));
             
             return true;
         case 'w':
