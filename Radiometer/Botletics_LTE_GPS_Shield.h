@@ -15,6 +15,15 @@
 #ifndef Botletics_LTE_GPS_Shield_h
 #define Botletics_LTE_GPS_Shield_h
 
+//// ---> MEMORY CHECKING
+#ifdef __arm__
+// should use uinstd.h to define sbrk but Due causes a conflict
+extern "C" char* sbrk(int incr);
+#else  // __ARM__
+extern char *__brkval;
+#endif  // __arm__
+//// ---> MEMORY CHECKING
+
 #include <Arduino.h>
 #include <SoftwareSerial.h>
 #include <Adafruit_FONA.h>
@@ -163,6 +172,8 @@ private:
     void subString(char* inputString, char* outputSubstring, byte start, byte length);
     
     void resetVariables();
+    
+    int freeMemory();
     
 };
 #endif // Botletics_LTE_GPS_Shield_h

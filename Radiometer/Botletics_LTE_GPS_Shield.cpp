@@ -601,6 +601,42 @@ void Botletics_LTE_GPS_Shield::sendDataSegment(char* filename, long dataSegment)
 {
     bool success = false;
     
+    //~ char cmdStr[40];
+    //~ sprintf(cmdStr, "AT+SMPUB=\"%s\",%i,%i,%i", "text/message", strlen(this->dataSeries), 1, 0);
+    
+    //~ this->pFonaSS->println(cmdStr);
+    
+    //~ while (!(this->pFonaSS->available()))
+    //~ {
+        //~ ;
+    //~ }
+    
+    //~ char c;
+    //~ bool sendData = false;
+    
+    //~ while (this->pFonaSS->available()) {
+        //~ c = this->pFonaSS->read();        
+        
+        //~ if (c == '\r') continue; // 13
+        //~ if (c == '\n') continue; // 10
+        //~ if (c == '>') sendData = true; // 62
+        //~ if (c == ' ') break;
+    //~ }
+    
+    //~ this->pFonaSS->println(this->dataSeries);
+    
+    
+    //~ success = this->fona.MQTT_publish(
+        //~ "test/message", 
+        //~ this->dataSeries,
+        //~ strlen(this->dataSeries), 
+        //~ 1, 
+        //~ 0
+    //~ );
+    
+    //~ this->pSerial->print(F("Success : "));
+    //~ this->pSerial->println(success);
+    
     while (!success) {
         success = this->fona.MQTT_publish(
             "test/message", 
@@ -609,12 +645,12 @@ void Botletics_LTE_GPS_Shield::sendDataSegment(char* filename, long dataSegment)
             1, 
             0
         );
-        
-        if (!success) {
-            this->pSerial->println(F("Failed to publish to broker, retrying..."));
-            delay(10000);
-        }
     }
+    
+    Serial.println();
+    Serial.print(F("Free Memory : "));
+    Serial.println(this->freeMemory());
+    Serial.println();
 }
 
 // Build the file and path variables for FTP upload
@@ -682,3 +718,16 @@ void Botletics_LTE_GPS_Shield::resetVariables()
     this->setMinutes(0);
     this->setSeconds(0.0f);
 }
+
+/// MEMORY CHECKING
+int Botletics_LTE_GPS_Shield::freeMemory() {
+  char top;
+#ifdef __arm__
+  return &top - reinterpret_cast<char*>(sbrk(0));
+#elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
+  return &top - __brkval;
+#else  // __arm__
+  return __brkval ? &top - __brkval : &top - __malloc_heap_start;
+#endif  // __arm__
+}
+/// MEMORY CHECKING
