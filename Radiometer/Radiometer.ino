@@ -44,10 +44,10 @@ const char* pins[8] = {"","A0", "", "A1", "", "", "", "A2"};
 const char* pHEADING_STRING = "ch1,ch2,tp1,ch3,ch4,tp2,ch5,ch6,ch7,ch8,tp3,Year,Month,Day,Hour,Minutes,Seconds";
 
 // Define FTP server connection properties
-const char* serverIP = "dirsftp,cis.rit.edu";
+const char* serverIP = "";
 const byte serverPort = 21;
 const char* username = "anonymous";
-const char* password = "ritlandsat@cis.rit.edu";
+const char* password = "";
 
 // Create instances of all required componenets
 const ExtendedADCShield* pExtendedADCShield = nullptr;
